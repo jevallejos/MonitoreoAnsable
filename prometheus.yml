@@ -1,0 +1,31 @@
+# Configuración global
+global:
+  scrape_interval: 15s # Frecuencia de recolección de métricas
+
+# --- INICIO DE LA CONFIGURACIÓN DE ALERTAS ---
+# Apunta a nuestro archivo de reglas de alerta
+rule_files:
+  - "alert.rules.yml"
+
+# Define a dónde se deben enviar las alertas generadas
+alerting:
+  alertmanagers:
+    - static_configs:
+        # Apunta al servicio Alertmanager que instalamos, en su puerto por defecto
+        - targets: ['localhost:9093']
+# --- FIN DE LA CONFIGURACIÓN DE ALERTAS ---
+
+# Lista de "targets" o sistemas a monitorear
+scrape_configs:
+  # Job para monitorear el propio servidor de Prometheus
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Job para monitorear los servidores JBoss a través de sus node_exporters
+  - job_name: 'jboss_servers'
+    static_configs:
+      - targets:
+        - 'CLSENJBOSSDEV1:9100'
+        - 'CLSENJBOSSDEV3:9100'
+        - 'CLSENQAJWS3:9100'
