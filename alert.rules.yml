@@ -1,0 +1,33 @@
+groups:
+  - name: Alertas_Servidores_JBoss
+    rules:
+      # --- Regla para el uso alto de CPU ---
+      - alert: UsoAltoCPU
+        # PromQL: Calcula el % de uso de CPU (no-idle) promediado en los últimos 2 minutos.
+        # Se activa si el resultado es mayor a 85.
+        expr: 100 - (avg by (instance) (rate(node_cpu_seconds_total{mode="idle"}[2m])) * 100) > 85
+        # Duración: La condición debe ser verdadera por 2 minutos continuos para que la alerta se dispare.
+        for: 2m
+        # Etiquetas: Información extra para enrutar la alerta. 'remediation: cpu' es CLAVE para Alertmanager.
+        labels:
+          severity: critical
+          remediation: cpu
+        # Anotaciones: Mensajes descriptivos para la notificación.
+        annotations:
+          summary: "Uso de CPU alto en {{ $labels.instance }}"
+          description: "La CPU en {{ $labels.instance }} ha superado el 85% durante más de 2 minutos. Valor actual: {{ $value | printf `%.2f` }}%"
+
+      # --- Regla para el uso alto de RAM ---
+      - alert: UsoAltoRAM
+        # PromQL: Calcula el % de memoria disponible.
+        # Se activa si es menor al 15% (es decir, más del 85% en uso).
+        expr: (node_memory_MemAvailable_bytes / node_memory_MemTotal_bytes) * 100 < 15
+        # Duración: La condición debe ser verdadera por 2 minutos.
+        for: 2m
+        # Etiquetas: 'remediation: ram' es CLAVE para que Alertmanager sepa qué playbook ejecutar.
+        labels:
+          severity: critical
+          remediation: ram
+        annotations:
+          summary: "Uso de RAM alto en {{ $labels.instance }}"
+          description: "La memoria RAM disponible en {{ $labels.instance }} es inferior al 15% durante más de 2 minutos."
