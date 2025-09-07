@@ -1,0 +1,36 @@
+[
+  {
+    "id": "remediar-cpu",
+    "execute-command": "/usr/bin/ansible-playbook",
+    "command-working-directory": "/opt/ansible_playbooks",
+    "pass-arguments-to-command": [
+      {
+        "source": "string",
+        "name": "remediate_cpu.yml"
+      }
+    ],
+    "pass-environment-to-command": [
+      {
+        "source": "payload",
+        "envname": "ALERT_PAYLOAD"
+      }
+    ]
+  },
+  {
+    "id": "remediar-ram",
+    "execute-command": "/usr/bin/ansible-playbook",
+    "command-working-directory": "/opt/ansible_playbooks",
+    "pass-arguments-to-command": [
+      {
+        "source": "string",
+        "name": "remediate_ram.yml"
+      }
+    ],
+    "pass-environment-to-command": [
+      {
+        "source": "payload",
+        "envname": "ALERT_PAYLOAD"
+      }
+    ]
+  }
+]
