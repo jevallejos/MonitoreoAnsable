@@ -1,0 +1,18 @@
+- name: Parte 1 - Procesar Alerta y Añadir Host Dinámico
+  hosts: localhost
+  gather_facts: no
+  tasks:
+    - name: Extraer hostname del payload y añadirlo a un grupo dinámico
+      ansible.builtin.add_host:
+        name: "{{ (lookup('env', 'ALERT_PAYLOAD') | from_json).alerts[0].labels.instance.split(':')[0] }}"
+        groups: remediacion_target
+
+- name: Parte 2 - Ejecutar Remediación
+  hosts: remediacion_target
+  become: yes
+  tasks:
+    # Cambia el comando según el playbook (stress-ng para RAM, aumentar_cpu.sh para CPU)
+    - name: "ACCIÓN: Ejecutar comando de remediación"
+      ansible.builtin.command:
+        cmd: killall stress-ng
+      ignore_errors: yes
