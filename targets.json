@@ -1,0 +1,13 @@
+[
+  {
+    "targets": [
+      "CLSENJBOSSDEV1:9100",
+      "CLSENJBOSSDEV3:9100",
+      "CLSENQAJWS3:9100"
+    ],
+    "labels": {
+      "env": "development",
+      "job": "jboss_servers"
+    }
+  }
+]
