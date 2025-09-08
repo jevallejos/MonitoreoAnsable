@@ -1,54 +1,56 @@
-# La sección 'route' es el árbol de decisión principal para las alertas.
+# alertmanager.yml
+
 route:
-  # Agrupa las alertas por nombre y servidor para evitar notificaciones repetidas.
   group_by: ['alertname', 'instance']
-  
-  # Cuánto esperar para agrupar notificaciones para el mismo grupo.
   group_wait: 30s
-  
-  # Cuánto esperar antes de enviar una notificación para un grupo nuevo.
   group_interval: 5m
-  
-  # Cuánto esperar para repetir una notificación si la alerta persiste.
   repeat_interval: 1h
-  
-  # --- CAMBIO PRINCIPAL ---
-  # El receptor por defecto ahora es 'ansible_remediador'.
-  # Cualquier alerta que no coincida con una de las sub-rutas de abajo, irá aquí.
-  receiver: 'ansible_remediador'
+  # Receptor por defecto para alertas que no coincidan con las rutas de remediación.
+  # --- MEJORA: Se añade un receptor de notificaciones para visibilidad del equipo ---
+  receiver: 'slack-notifications'
 
-  # 'routes' es una lista de reglas de enrutamiento más específicas.
-  # Alertmanager las evalúa en orden y se detiene en la primera que coincida.
   routes:
-    # --- RUTA PARA ALERTAS DE CPU ---
-    # Si una alerta tiene la etiqueta 'remediation: cpu'...
-    - receiver: 'remediacion-cpu'
-      match:
-        remediation: cpu
+    # --- RUTA PARA REMEDIACIÓN AUTOMÁTICA ---
+    # Si una alerta tiene la etiqueta 'remediation', se envía al webhook de Ansible.
+    - receiver: 'ansible_remediador'
+      # --- MEJORA: Se usa 'matchers' que es más flexible ---
+      # Coincide si la etiqueta 'remediation' existe.
+      matchers:
+        - remediation!=""
+      # Continúa evaluando otras rutas hijas si esta coincide.
+      continue: true
 
-    # --- RUTA PARA ALERTAS DE RAM ---
-    # Si una alerta tiene la etiqueta 'remediation: ram'...
-    - receiver: 'remediacion-ram'
-      match:
-        remediation: ram
+    # --- SUB-RUTAS PARA REMEDIACIONES ESPECÍFICAS ---
+    # Estas son rutas hijas de la anterior. Solo se evaluarán si la alerta ya coincidió
+    # con 'remediation!=""'. Aquí se podría añadir lógica más específica si fuera necesario,
+    # aunque con el playbook actual no es estrictamente necesario.
+    - receiver: 'ansible_remediador'
+      matchers:
+        - remediation="cpu"
 
-# La sección 'receivers' define qué es y qué hace cada receptor.
+    - receiver: 'ansible_remediador'
+      matchers:
+        - remediation="ram"
+
 receivers:
-  # Definición del receptor por defecto.
   - name: 'ansible_remediador'
     webhook_configs:
-      # Envía a un hook genérico. Deberás crear este hook en tu archivo hooks.json
-      # para manejar cualquier otra alerta (ej. enviar un email o una notificación a Slack).
-      - url: 'http://127.0.0.1:9000/hooks/alerta-generica'
+      # --- MEJORA: URL única para el playbook de remediación genérico ---
+      - url: 'http://127.0.0.1:9000/hooks/remediar-servidor'
+        send_resolved: true
 
-  # Definición del receptor para la remediación específica de CPU.
-  - name: 'remediacion-cpu'
-    webhook_configs:
-      # URL del endpoint en nuestro servicio 'webhook' para el playbook de CPU.
-      - url: 'http://127.0.0.1:9000/hooks/remediar-cpu'
-
-  # Definición del receptor para la remediación específica de RAM.
-  - name: 'remediacion-ram'
-    webhook_configs:
-      # URL del endpoint en nuestro servicio 'webhook' para el playbook de RAM.
-      - url: 'http://127.0.0.1:9000/hooks/remediar-ram'
+  # --- NUEVO RECEPTOR: Notificaciones a Slack (o tu sistema preferido) ---
+  - name: 'slack-notifications'
+    slack_configs:
+      - api_url: 'https://hooks.slack.com/services/YOUR/SLACK/WEBHOOK_URL' # ¡Reemplazar con tu URL!
+        channel: '#alertas-produccion'
+        send_resolved: true
+        title: '[{{ .Status | toUpper }}{{ if eq .Status "firing" }}:{{ .Alerts.Firing | len }}{{ end }}] {{ .CommonLabels.alertname }} para {{ .CommonLabels.instance }}'
+        text: >-
+          {{ range .Alerts }}
+            *Alerta:* {{ .Annotations.summary }}
+            *Descripción:* {{ .Annotations.description }}
+            *Detalles:*
+            {{ range .Labels.SortedPairs }} • *{{ .Name }}:* `{{ .Value }}`
+            {{ end }}
+          {{ end }}
