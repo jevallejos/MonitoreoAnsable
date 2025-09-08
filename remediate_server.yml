@@ -1,0 +1,94 @@
+# remediate_server.yml
+
+# --- Parte 1: Procesar la alerta y añadir el host afectado dinámicamente ---
+- name: Parte 1 - Procesar Alerta y Añadir Host Dinámico
+  hosts: localhost
+  gather_facts: no
+  connection: local
+  tasks:
+    - name: Crear directorio para logs de remediación si no existe
+      ansible.builtin.file:
+        path: /var/log/ansible/remediation_logs
+        state: directory
+        mode: '0755'
+
+    - name: Extraer hostname del payload de la alerta
+      ansible.builtin.set_fact:
+        target_host: "{{ (lookup('env', 'ALERT_PAYLOAD') | from_json).alerts[0].labels.instance.split(':')[0] }}"
+
+    - name: Añadir el host afectado a un grupo dinámico en memoria
+      ansible.builtin.add_host:
+        name: "{{ target_host }}"
+        groups: remediacion_target
+
+# --- Parte 2: Ejecutar la remediación en el host afectado ---
+- name: Parte 2 - Ejecutar Remediación en {{ target_host | default('el host de la alerta') }}
+  hosts: remediacion_target
+  become: yes # Necesitamos ser root para la mayoría de las acciones
+  vars:
+    log_path: "/var/log/ansible/remediation_logs/{{ inventory_hostname }}_{{ ansible_date_time.iso8601 }}.log"
+  tasks:
+    # --- Tareas de Diagnóstico (se ejecutan siempre) ---
+    - name: "DIAGNÓSTICO: Recopilar los 5 procesos con mayor consumo de CPU"
+      ansible.builtin.shell:
+        cmd: "ps -eo pid,ppid,%cpu,%mem,cmd --sort=-%cpu | head -n 6"
+      register: top_cpu_processes
+      when: remediation_type == "cpu"
+
+    - name: "DIAGNÓSTICO: Recopilar los 5 procesos con mayor consumo de RAM"
+      ansible.builtin.shell:
+        cmd: "ps -eo pid,ppid,%cpu,%mem,cmd --sort=-%mem | head -n 6"
+      register: top_ram_processes
+      when: remediation_type == "ram"
+
+    - name: "LOGGING: Guardar información de diagnóstico en el servidor de Ansible"
+      delegate_to: localhost
+      ansible.builtin.copy:
+        content: |
+          Timestamp: {{ ansible_date_time.iso8601 }}
+          Alerta de: {{ remediation_type | upper }} en {{ inventory_hostname }}
+          ---
+          Top 5 Procesos por CPU:
+          {{ top_cpu_processes.stdout | default('No aplica') }}
+          ---
+          Top 5 Procesos por RAM:
+          {{ top_ram_processes.stdout | default('No aplica') }}
+        dest: "{{ log_path }}"
+
+    # --- Tareas de Remediación (dependiendo del tipo de alerta) ---
+    - name: "BLOQUE DE REMEDIACIÓN PARA ALTA RAM"
+      when: remediation_type == "ram"
+      block:
+        - name: "ACCIÓN (RAM): Limpiar caché del kernel (no disruptivo)"
+          ansible.builtin.command:
+            cmd: "sync; echo 3 > /proc/sys/vm/drop_caches"
+          changed_when: false # Este comando no es idempotente, así que no lo marcamos como cambio
+
+        - name: "ACCIÓN (RAM): Reiniciar servicio JBoss (ejemplo)"
+          ansible.builtin.service:
+            name: jboss.service # <-- ¡IMPORTANTE! Cambia esto por el nombre real de tu servicio.
+            state: restarted
+          register: service_restart_status
+
+        - name: "LOGGING (RAM): Registrar el resultado del reinicio del servicio"
+          delegate_to: localhost
+          ansible.builtin.lineinfile:
+            path: "{{ log_path }}"
+            line: "Resultado del reinicio del servicio: {{ 'Éxito' if not service_restart_status.failed else 'Fallo' }}"
+            create: yes
+
+    - name: "BLOQUE DE REMEDIACIÓN PARA ALTA CPU"
+      when: remediation_type == "cpu"
+      block:
+        - name: "ACCIÓN (CPU): Reiniciar servicio JBoss (ejemplo)"
+          ansible.builtin.service:
+            name: jboss.service # <-- ¡IMPORTANTE! Cambia esto por el nombre real de tu servicio.
+            state: restarted
+          register: service_restart_status
+
+        - name: "LOGGING (CPU): Registrar el resultado del reinicio del servicio"
+          delegate_to: localhost
+          ansible.builtin.lineinfile:
+            path: "{{ log_path }}"
+            line: "Resultado del reinicio del servicio: {{ 'Éxito' if not service_restart_status.failed else 'Fallo' }}"
+            create: yes
