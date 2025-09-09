@@ -1,0 +1,22 @@
+[Unit]
+# Descripción del servicio para los administradores
+Description=Webhook - Lightweight Incoming Webhook Server
+# Define que el servicio debe esperar a que la red esté activa
+After=network.target
+
+[Service]
+# Especifica el usuario y grupo con el que se ejecutará el proceso
+User=webhook
+Group=webhook
+# Variable de entorno para que Ansible use /tmp para archivos temporales
+Environment="ANSIBLE_LOCAL_TEMP=/tmp"
+# Variable de entorno para que Ansible no intente escribir en un /home inexistente
+Environment="HOME=/tmp"
+# El comando de ejecución, apuntando al archivo de hooks y habilitando la recarga en caliente
+ExecStart=/usr/local/bin/webhook -hooks /etc/webhook/hooks.json -verbose -template
+# Reiniciar el servicio automáticamente si falla
+Restart=on-failure
+
+[Install]
+# Define que el servicio debe iniciarse en el arranque del sistema
+WantedBy=multi-user.target
