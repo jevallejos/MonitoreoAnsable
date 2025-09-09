@@ -1,0 +1,21 @@
+[Unit]
+# Descripción del servicio
+Description=Alertmanager for Prometheus
+# Define que el servicio debe esperar a que la red esté activa para iniciar
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+# Especifica el usuario y grupo con el que se ejecutará el proceso
+User=alertmanager
+Group=alertmanager
+# Define el tipo de servicio
+Type=simple
+# El comando exacto para iniciar Alertmanager, apuntando a nuestros directorios
+ExecStart=/usr/local/bin/alertmanager \
+    --config.file=/etc/alertmanager/alertmanager.yml \
+    --storage.path=/var/lib/alertmanager \
+    --cluster.advertise-address=192.156.144.170:9094
+
+[Install]
+# Define que el servicio debe iniciarse en el arranque del sistema
